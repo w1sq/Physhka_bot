@@ -7,14 +7,16 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.types import (
     ReplyKeyboardMarkup,
     KeyboardButton,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
 )
 
-from db.storage import UserStorage, User
+from db.storage import UsersStorage, User
 
 
 class TG_Bot:
-    def __init__(self, bot_token: str, user_storage: UserStorage):
-        self._user_storage: UserStorage = user_storage
+    def __init__(self, bot_token: str, users_storage: UsersStorage):
+        self._users_storage: UsersStorage = users_storage
         self._bot: aiogram.Bot = aiogram.Bot(
             token=bot_token, default=DefaultBotProperties(parse_mode="HTML")
         )
@@ -30,7 +32,24 @@ class TG_Bot:
         await self._dispatcher.start_polling(self._bot)
 
     async def _show_menu(self, message: aiogram.types.Message, user: User):
-        await message.answer("Добро пожаловать", reply_markup=self._menu_keyboard_user)
+        splitted_message_text = message.text.split()
+        if len(splitted_message_text) == 2:
+            event_id = splitted_message_text[1]
+            event = await self._events_storage.get_by_id(event_id)
+            if event is not None:
+                await message.answer(
+                    f"Запись на забег номер {event.id}",
+                    # reply_markup=self._menu_keyboard_admin,
+                )
+            else:
+                await message.answer(
+                    "Забег не найден", reply_markup=self._menu_keyboard_user
+                )
+        else:
+            await message.answer(
+                "Добро пожаловать в телеграм бота бегового клуба Physhka",
+                reply_markup=self._menu_keyboard_user,
+            )
 
     def _init_handler(self):
         self._dispatcher.message.register(
@@ -42,10 +61,10 @@ class TG_Bot:
 
     def _user_middleware(self, func: typing.Callable) -> typing.Callable:
         async def wrapper(message: aiogram.types.Message, *args, **kwargs):
-            user = await self._user_storage.get_by_id(message.chat.id)
+            user = await self._users_storage.get_by_id(message.chat.id)
             if user is None:
                 user = User(id=message.chat.id, role=User.USER)
-                await self._user_storage.create(user)
+                await self._users_storage.create(user)
 
             if user.role != User.BLOCKED:
                 await func(message, user)
@@ -60,7 +79,14 @@ class TG_Bot:
         return wrapper
 
     def _create_keyboards(self):
-        self._menu_keyboard_user = ReplyKeyboardMarkup(
-            keyboard=[[KeyboardButton(text="Menu")]],
+        self._menu_keyboard_user = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="📅 Ближайшие забеги", callback_data="events"
+                    )
+                ],
+                # [InlineKeyboardButton(text="🏃‍♂️ Наши бегуны", callback_data="runners")],
+            ],
             resize_keyboard=True,
         )
