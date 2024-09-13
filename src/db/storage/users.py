@@ -16,6 +16,9 @@ class User:
     emergency_contact: Optional[str] = None
     role: str = USER
 
+    def __str__(self):
+        return f"<a href='tg://user?id={self.id}'>{self.name}</a>\nPhone: {self.phone}\nEmergency Contact: {self.emergency_contact}"
+
 
 class UsersStorage:
     __table = "users"

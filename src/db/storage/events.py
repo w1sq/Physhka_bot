@@ -11,6 +11,7 @@ class Event:
     date: str
     location: str
     tempo: str
+    photo_id: str
     id: int = field(default=None)
 
     def __str__(self):
@@ -32,7 +33,8 @@ class EventsStorage:
                 description TEXT,
                 date TEXT,
                 location TEXT,
-                tempo TEXT
+                tempo TEXT,
+                photo_id TEXT
             )
         """
         )
@@ -44,19 +46,33 @@ class EventsStorage:
         )
         if data is None:
             return None
-        return Event(data[1], data[2], data[3], data[4], id=data[0])
+        return Event(data[1], data[2], data[3], data[4], data[5], id=data[0])
 
     async def create(self, event: Event) -> int:
         return await self._db.fetchval(
             f"""
-            INSERT INTO {self.__table} (description, date, location, tempo) 
-            VALUES ($1, $2, $3, $4)
+            INSERT INTO {self.__table} (description, date, location, tempo, photo_id) 
+            VALUES ($1, $2, $3, $4, $5)
             RETURNING id
         """,
             event.description,
             event.date,
             event.location,
             event.tempo,
+            event.photo_id,
+        )
+
+    async def update(self, event: Event):
+        await self._db.execute(
+            f"""
+            UPDATE {self.__table} SET description = $1, date = $2, location = $3, tempo = $4, photo_id = $5 WHERE id = $6
+        """,
+            event.description,
+            event.date,
+            event.location,
+            event.tempo,
+            event.photo_id,
+            event.id,
         )
 
     async def get_all_events(self) -> List[Event]:
@@ -73,6 +89,7 @@ class EventsStorage:
                 event_data[2],
                 event_data[3],
                 event_data[4],
+                event_data[5],
                 id=event_data[0],
             )
             for event_data in data
