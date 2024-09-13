@@ -5,7 +5,7 @@ import aioschedule
 from db.db import DB
 from bot import TG_Bot
 from config_reader import config
-from db.storage import UsersStorage
+from db.storage import UsersStorage, EventsStorage
 
 
 async def init_db():
@@ -19,7 +19,9 @@ async def init_db():
     await db.init()
     users_storage = UsersStorage(db)
     await users_storage.init()
-    return users_storage
+    events_storage = EventsStorage(db)
+    await events_storage.init()
+    return users_storage, events_storage
 
 
 async def check_schedule():
@@ -29,9 +31,11 @@ async def check_schedule():
 
 
 async def main():
-    users_storage = await init_db()
+    users_storage, events_storage = await init_db()
     tg_bot = TG_Bot(
-        bot_token=config.tgbot_api_key.get_secret_value(), users_storage=users_storage
+        bot_token=config.tgbot_api_key.get_secret_value(),
+        users_storage=users_storage,
+        events_storage=events_storage,
     )
     await tg_bot.init()
 

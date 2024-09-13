@@ -11,7 +11,7 @@ class User:
     BLOCKED = "blocked"
 
     id: int
-    name: str
+    name: Optional[str] = None
     phone: Optional[str] = None
     emergency_contact: Optional[str] = None
     role: str = USER
@@ -72,6 +72,17 @@ class UsersStorage:
             user.phone,
             user.emergency_contact,
             user.role,
+        )
+
+    async def update(self, user: User):
+        await self._db.execute(
+            f"""
+            UPDATE {self.__table} SET name = $1, phone = $2, emergency_contact = $3 WHERE id = $4
+        """,
+            user.name,
+            user.phone,
+            user.emergency_contact,
+            user.id,
         )
 
     async def get_all_members(self) -> List[User]:
