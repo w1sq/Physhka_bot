@@ -1,5 +1,5 @@
 import typing
-
+from datetime import datetime
 import aiogram
 from aiogram.filters.command import Command
 from aiogram.fsm.state import State, StatesGroup
@@ -97,6 +97,14 @@ class TG_Bot:
         await state.set_state(GetEventData.date)
 
     async def _get_event_date(self, message: aiogram.types.Message, state: FSMContext):
+        try:
+            datetime.strptime(message.text.strip(), "%d.%m в %H:%M")
+        except ValueError:
+            await message.answer(
+                "Пожалуйста, введите дату в формате ДД.ММ в ЧЧ:ММ",
+                reply_markup=self._cancel_keyboard,
+            )
+            return
         await state.update_data(date=message.text.strip())
         await message.answer(
             "Введите место проведения забега:", reply_markup=self._cancel_keyboard
@@ -115,7 +123,7 @@ class TG_Bot:
         event_data = await state.get_data()
         event = Event(
             description=event_data["description"],
-            date=event_data["date"],
+            date=datetime.strptime(event_data["date"], "%d.%m в %H:%M"),
             location=event_data["location"],
             tempo=event_data["tempo"],
             photo_id=event_data["event_photo_id"],
@@ -135,34 +143,64 @@ class TG_Bot:
 
     async def _show_menu(self, message: aiogram.types.Message, user: User):
         splitted_message_text = message.text.split()
-        if user.role == User.ADMIN:
-            await message.answer(
-                "Добро пожаловать в админ панель",
-                reply_markup=self._menu_keyboard_admin,
-            )
-        elif len(splitted_message_text) == 2:
+
+        if len(splitted_message_text) == 2:
             event_id = int(splitted_message_text[1])
             event = await self._events_storage.get_by_id(event_id)
             if event is not None:
-                registration_keyboard = InlineKeyboardMarkup(
-                    inline_keyboard=[
-                        [
-                            InlineKeyboardButton(
-                                text="Записаться",
-                                callback_data=f"register_{event.id}_{user.id}",
-                            )
+                if user.role == User.ADMIN:
+                    registration_keyboard = InlineKeyboardMarkup(
+                        inline_keyboard=[
+                            [
+                                InlineKeyboardButton(
+                                    text="Посмотреть участников",
+                                    callback_data=f"event_users_{event.id}",
+                                )
+                            ],
+                            [
+                                InlineKeyboardButton(
+                                    text="Изменить забег",
+                                    callback_data=f"edit_event_{event.id}",
+                                )
+                            ],
+                            [
+                                InlineKeyboardButton(
+                                    text="Удалить забег",
+                                    callback_data=f"delete_event_{event.id}",
+                                )
+                            ],
                         ]
-                    ]
-                )
-                await message.answer_photo(
-                    event.photo_id,
-                    caption=f"Запись на забег:\n\n{event}",
-                    reply_markup=registration_keyboard,
-                )
+                    )
+                    await message.answer_photo(
+                        event.photo_id,
+                        caption=str(event),
+                        reply_markup=registration_keyboard,
+                    )
+                else:
+                    registration_keyboard = InlineKeyboardMarkup(
+                        inline_keyboard=[
+                            [
+                                InlineKeyboardButton(
+                                    text="Записаться",
+                                    callback_data=f"register_{event.id}_{user.id}",
+                                )
+                            ]
+                        ]
+                    )
+                    await message.answer_photo(
+                        event.photo_id,
+                        caption=f"Запись на забег:\n\n{event}",
+                        reply_markup=registration_keyboard,
+                    )
             else:
                 await message.answer(
                     "Забег не найден", reply_markup=self._menu_keyboard_user
                 )
+        elif user.role == User.ADMIN:
+            await message.answer(
+                "Добро пожаловать в админ панель",
+                reply_markup=self._menu_keyboard_admin,
+            )
         else:
             await message.answer(
                 "Добро пожаловать в телеграм бота бегового клуба Physhka",
@@ -222,26 +260,64 @@ class TG_Bot:
             reply_markup=self._menu_keyboard_user,
         )
 
-    async def _show_events(self, callback: aiogram.types.CallbackQuery):
-        user = await self._users_storage.get_by_id(callback.from_user.id)
-        if user.role == User.USER:
-            events = await self._events_storage.get_all_events()
+    async def _show_my_events(self, callback: aiogram.types.CallbackQuery):
+        user_id = callback.from_user.id
+        events = await self._events_storage.get_user_events(user_id, actual_only=True)
+        if len(events) == 0:
+            await callback.message.answer("Вы не записаны ни на один забег")
+        else:
+            await callback.message.answer("Ваши регистрации:")
             for event in events:
-                registration_keyboard = InlineKeyboardMarkup(
-                    inline_keyboard=[
-                        [
-                            InlineKeyboardButton(
-                                text="Записаться",
-                                callback_data=f"register_{event.id}_{callback.from_user.id}",
-                            )
-                        ]
-                    ]
+                registration = (
+                    await self._events_storage.registrations.get_registration(
+                        user_id, event.id
+                    )
                 )
                 await callback.message.answer_photo(
                     event.photo_id,
                     caption=str(event),
-                    reply_markup=registration_keyboard,
+                    reply_markup=self._create_excuse_keyboard(
+                        event.id, user_id, registration.late
+                    ),
                 )
+
+    async def _show_events(self, callback: aiogram.types.CallbackQuery):
+        user = await self._users_storage.get_by_id(callback.from_user.id)
+        if user.role == User.USER:
+            events = await self._events_storage.get_all_events(actual_only=True)
+            if len(events) == 0:
+                await callback.message.answer("На данный момент нет активных забегов")
+            else:
+                for event in events:
+                    registration = (
+                        await self._events_storage.registrations.is_registered(
+                            callback.from_user.id, event.id
+                        )
+                    )
+                    if not registration:
+                        registration_keyboard = InlineKeyboardMarkup(
+                            inline_keyboard=[
+                                [
+                                    InlineKeyboardButton(
+                                        text="Записаться",
+                                        callback_data=f"register_{event.id}_{callback.from_user.id}",
+                                    )
+                                ]
+                            ]
+                        )
+                        await callback.message.answer_photo(
+                            event.photo_id,
+                            caption=str(event),
+                            reply_markup=registration_keyboard,
+                        )
+                    else:
+                        await callback.message.answer_photo(
+                            event.photo_id,
+                            caption=str(event),
+                            reply_markup=self._create_excuse_keyboard(
+                                event.id, callback.from_user.id, registration.late
+                            ),
+                        )
         else:
             events = await self._events_storage.get_all_events()
             for event in events:
@@ -279,8 +355,125 @@ class TG_Bot:
         message = ""
         for user_id in users_ids:
             user = await self._users_storage.get_by_id(user_id)
-            message += str(user) + "\n\n"
+            registration = await self._events_storage.registrations.get_registration(
+                user_id, event_id
+            )
+            if registration.late == 0:
+                message += str(user) + "\n\n"
+            elif registration.late == -1:
+                message += f"<s>{user}</s>\n\n"
+            else:
+                message += str(user) + f"\nОпоздание {registration.late} мин\n\n"
         await callback.message.answer(message)
+
+    async def _ask_change_late(
+        self, callback: aiogram.types.CallbackQuery, state: FSMContext
+    ):
+        event_id = int(callback.data.split("_")[-2])
+        user_id = int(callback.data.split("_")[-1])
+        late_keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="5 минут", callback_data=f"late_{event_id}_{user_id}_5"
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text="10 минут", callback_data=f"late_{event_id}_{user_id}_10"
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text="15 минут", callback_data=f"late_{event_id}_{user_id}_15"
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text="Отписаться",
+                        callback_data=f"late_{event_id}_{user_id}_-1",
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text="Назад",
+                        callback_data=f"set_classic_late_keyboard_{event_id}_{user_id}",
+                    )
+                ],
+            ]
+        )
+        await self._bot.edit_message_reply_markup(
+            chat_id=callback.message.chat.id,
+            message_id=callback.message.message_id,
+            reply_markup=late_keyboard,
+        )
+
+    def _create_excuse_keyboard(self, event_id: int, user_id: int, late: int):
+        if late == -1:
+            return InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text="Я всё-таки приду",
+                            callback_data=f"late_{event_id}_{user_id}_0",
+                        )
+                    ]
+                ]
+            )
+        elif late == 0:
+            return InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text="Я не приду/опоздаю",
+                            callback_data=f"change_late_{event_id}_{user_id}",
+                        )
+                    ]
+                ]
+            )
+        else:
+            return InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text="Я буду вовремя",
+                            callback_data=f"late_{event_id}_{user_id}_0",
+                        )
+                    ]
+                ]
+            )
+
+    async def _set_late(self, callback: aiogram.types.CallbackQuery):
+        event_id = int(callback.data.split("_")[1])
+        user_id = int(callback.data.split("_")[2])
+        late_minutes = int(callback.data.split("_")[3])
+        await self._events_storage.registrations.set_late(
+            user_id, event_id, late_minutes
+        )
+        await self._bot.edit_message_reply_markup(
+            chat_id=callback.message.chat.id,
+            message_id=callback.message.message_id,
+            reply_markup=self._create_excuse_keyboard(event_id, user_id, late_minutes),
+        )
+
+    async def _set_classic_late_keyboard(self, callback: aiogram.types.CallbackQuery):
+        event_id = int(callback.data.split("_")[-2])
+        user_id = int(callback.data.split("_")[-1])
+        late_cancel_keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="Я не приду/опоздаю",
+                        callback_data=f"change_late_{event_id}_{user_id}",
+                    )
+                ]
+            ]
+        )
+        await self._bot.edit_message_reply_markup(
+            chat_id=callback.message.chat.id,
+            message_id=callback.message.message_id,
+            reply_markup=late_cancel_keyboard,
+        )
 
     async def _confirm_deleting_event(
         self, callback: aiogram.types.CallbackQuery, state: FSMContext
@@ -367,12 +560,28 @@ class TG_Bot:
             aiogram.F.data.startswith("register_"),
         )
         self._dispatcher.callback_query.register(
+            self._show_my_events,
+            aiogram.F.data.startswith("my_registrations"),
+        )
+        self._dispatcher.callback_query.register(
             self._show_event_users,
             aiogram.F.data.startswith("event_users_"),
         )
         self._dispatcher.callback_query.register(
             self._edit_event,
             aiogram.F.data.startswith("edit_event_"),
+        )
+        self._dispatcher.callback_query.register(
+            self._ask_change_late,
+            aiogram.F.data.startswith("change_late_"),
+        )
+        self._dispatcher.callback_query.register(
+            self._set_classic_late_keyboard,
+            aiogram.F.data.startswith("set_classic_late_keyboard_"),
+        )
+        self._dispatcher.callback_query.register(
+            self._set_late,
+            aiogram.F.data.startswith("late_"),
         )
         self._dispatcher.message.register(
             self._edit_event_description,
@@ -445,11 +654,11 @@ class TG_Bot:
                         text="📅 Ближайшие забеги", callback_data="events"
                     )
                 ],
-                # [
-                #     InlineKeyboardButton(
-                #         text="Мои регистрации", callback_data="my_registrations"
-                #     )
-                # ],
+                [
+                    InlineKeyboardButton(
+                        text="🏃‍♂️ Мои регистрации", callback_data="my_registrations"
+                    )
+                ],
                 # [InlineKeyboardButton(text="🏃‍♂️ Наши бегуны", callback_data="runners")],
             ],
             resize_keyboard=True,

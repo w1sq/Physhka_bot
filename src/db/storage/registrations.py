@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List
+from typing import List, Optional
 
 from db.db import DB
 
@@ -8,6 +8,7 @@ from db.db import DB
 class Registration:
     user_id: int
     event_id: int
+    late: int
 
 
 class RegistrationsStorage:
@@ -22,6 +23,7 @@ class RegistrationsStorage:
             CREATE TABLE IF NOT EXISTS {self.__table} (
                 user_id BIGINT,
                 event_id BIGINT,
+                late INTEGER DEFAULT 0,
                 PRIMARY KEY (user_id, event_id),
                 FOREIGN KEY (event_id) REFERENCES events(id)
             )
@@ -31,7 +33,7 @@ class RegistrationsStorage:
     async def register(self, user_id: int, event_id: int):
         await self._db.execute(
             f"""
-            INSERT INTO {self.__table} (user_id, event_id) 
+            INSERT INTO {self.__table} (user_id, event_id)
             VALUES ($1, $2)
             ON CONFLICT DO NOTHING
             """,
@@ -49,18 +51,18 @@ class RegistrationsStorage:
             event_id,
         )
 
-    async def is_registered(self, user_id: int, event_id: int) -> bool:
-        result = await self._db.fetchval(
+    async def is_registered(
+        self, user_id: int, event_id: int
+    ) -> Optional[Registration]:
+        data = await self._db.fetchrow(
             f"""
-            SELECT EXISTS(
-                SELECT 1 FROM {self.__table}
-                WHERE user_id = $1 AND event_id = $2
-            )
+            SELECT user_id, event_id, late FROM {self.__table}
+            WHERE user_id = $1 AND event_id = $2
             """,
             user_id,
             event_id,
         )
-        return result
+        return Registration(*data) if data else None
 
     async def get_event_registrations(self, event_id: int) -> List[int]:
         data = await self._db.fetch(
@@ -81,3 +83,23 @@ class RegistrationsStorage:
             user_id,
         )
         return [row[0] for row in data]
+
+    async def set_late(self, user_id: int, event_id: int, late: int):
+        await self._db.execute(
+            f"""
+            UPDATE {self.__table} SET late = $3 WHERE user_id = $1 AND event_id = $2
+            """,
+            user_id,
+            event_id,
+            late,
+        )
+
+    async def get_registration(
+        self, user_id: int, event_id: int
+    ) -> Optional[Registration]:
+        data = await self._db.fetchrow(
+            f"SELECT user_id, event_id, late FROM {self.__table} WHERE user_id = $1 AND event_id = $2",
+            user_id,
+            event_id,
+        )
+        return Registration(*data) if data else None
