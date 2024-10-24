@@ -121,9 +121,11 @@ class TG_Bot:
     async def _get_event_tempo(self, message: aiogram.types.Message, state: FSMContext):
         await state.update_data(tempo=message.text.strip())
         event_data = await state.get_data()
+        date = datetime.strptime(event_data["date"], "%d.%m в %H:%M")
+        date = date.replace(year=datetime.now().year)
         event = Event(
             description=event_data["description"],
-            date=datetime.strptime(event_data["date"], "%d.%m в %H:%M"),
+            date=date,
             location=event_data["location"],
             tempo=event_data["tempo"],
             photo_id=event_data["event_photo_id"],
