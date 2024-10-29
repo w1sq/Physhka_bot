@@ -10,10 +10,13 @@ class User:
     USER = "user"
     BLOCKED = "blocked"
 
+    locations = {"1": "Москва", "2": "Долгопрудный"}
+
     id: int
     name: Optional[str] = None
     phone: Optional[str] = None
     emergency_contact: Optional[str] = None
+    location: str = "1"
     role: str = USER
 
     def __str__(self):
@@ -34,6 +37,7 @@ class UsersStorage:
                 name TEXT,
                 phone TEXT,
                 emergency_contact TEXT,
+                location TEXT,
                 role TEXT
             )
         """
@@ -45,7 +49,7 @@ class UsersStorage:
         )
         if data is None:
             return None
-        return User(data[0], data[1], data[2], data[3], data[4])
+        return User(data[0], data[1], data[2], data[3], data[4], data[5])
 
     async def promote_to_admin(self, user_id: int):
         await self._db.execute(
@@ -68,23 +72,25 @@ class UsersStorage:
     async def create(self, user: User):
         await self._db.execute(
             f"""
-            INSERT INTO {self.__table} (id, name, phone, emergency_contact, role) VALUES ($1, $2, $3, $4, $5)
+            INSERT INTO {self.__table} (id, name, phone, emergency_contact, location, role) VALUES ($1, $2, $3, $4, $5, $6)
         """,
             user.id,
             user.name,
             user.phone,
             user.emergency_contact,
+            user.location,
             user.role,
         )
 
     async def update(self, user: User):
         await self._db.execute(
             f"""
-            UPDATE {self.__table} SET name = $1, phone = $2, emergency_contact = $3 WHERE id = $4
+            UPDATE {self.__table} SET name = $1, phone = $2, emergency_contact = $3, location = $4 WHERE id = $5
         """,
             user.name,
             user.phone,
             user.emergency_contact,
+            user.location,
             user.id,
         )
 
@@ -97,7 +103,14 @@ class UsersStorage:
         if data is None:
             return None
         return [
-            User(user_data[0], user_data[1], user_data[2], user_data[3], user_data[4])
+            User(
+                user_data[0],
+                user_data[1],
+                user_data[2],
+                user_data[3],
+                user_data[4],
+                user_data[5],
+            )
             for user_data in data
         ]
 
