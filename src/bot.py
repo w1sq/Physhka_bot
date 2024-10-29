@@ -283,6 +283,53 @@ class TG_Bot:
                     ),
                 )
 
+    def _build_location_keyboard(self, user_location: str):
+        moscow_text = "Москва"
+        dolgoprudny_text = "Долгопрудный"
+        all_text = "Все локации"
+        if user_location == "12":
+            all_text = "✅ Все локации"
+        elif user_location == "1":
+            moscow_text = "✅ Москва"
+        elif user_location == "2":
+            dolgoprudny_text = "✅ Долгопрудный"
+
+        location_keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text=moscow_text, callback_data="change_location_1"
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text=dolgoprudny_text, callback_data="change_location_2"
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text=all_text, callback_data="change_location_12"
+                    )
+                ],
+            ]
+        )
+        return location_keyboard
+
+    async def _change_location(self, callback: aiogram.types.CallbackQuery):
+        user = await self._users_storage.get_by_id(callback.from_user.id)
+        await callback.message.answer(
+            "Выберите город:", reply_markup=self._build_location_keyboard(user.location)
+        )
+
+    async def _change_location_choice(self, callback: aiogram.types.CallbackQuery):
+        location = callback.data.split("_")[1]
+        user = await self._users_storage.get_by_id(callback.from_user.id)
+        user.location = location
+        await self._users_storage.update(user)
+        await callback.message.edit_reply_markup(
+            reply_markup=self._build_location_keyboard(location)
+        )
+
     async def _show_events(self, callback: aiogram.types.CallbackQuery):
         user = await self._users_storage.get_by_id(callback.from_user.id)
         if user.role == User.USER:
@@ -542,6 +589,14 @@ class TG_Bot:
             self._user_middleware(self._show_menu), aiogram.F.text == "Menu"
         )
         self._dispatcher.callback_query.register(
+            self._change_location,
+            aiogram.F.data == "change_location",
+        )
+        self._dispatcher.callback_query.register(
+            self._change_location_choice,
+            aiogram.F.data.startswith("change_location_"),
+        )
+        self._dispatcher.callback_query.register(
             self._show_events,
             aiogram.F.data == "events",
         )
@@ -659,6 +714,11 @@ class TG_Bot:
                 [
                     InlineKeyboardButton(
                         text="🏃‍♂️ Мои регистрации", callback_data="my_registrations"
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text="Выбрать город", callback_data="change_location"
                     )
                 ],
                 # [InlineKeyboardButton(text="🏃‍♂️ Наши бегуны", callback_data="runners")],
