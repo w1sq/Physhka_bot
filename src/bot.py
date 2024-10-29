@@ -21,6 +21,7 @@ class GetUserData(StatesGroup):
 
 
 class GetEventData(StatesGroup):
+    city = State()
     photo = State()
     description = State()
     date = State()
@@ -33,6 +34,7 @@ class ConfirmDeletingEvent(StatesGroup):
 
 
 class EditEventData(StatesGroup):
+    city = State()
     photo = State()
     description = State()
     date = State()
@@ -63,9 +65,24 @@ class TG_Bot:
         print("Bot has started")
         await self._dispatcher.start_polling(self._bot)
 
-    async def _create_event(
+    async def _create_event(self, callback: aiogram.types.CallbackQuery):
+        city_keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="Москва", callback_data="set_event_city_1")],
+                [
+                    InlineKeyboardButton(
+                        text="Долгопрудный", callback_data="set_event_city_2"
+                    )
+                ],
+            ]
+        )
+        await callback.message.answer("Выберите город:", reply_markup=city_keyboard)
+
+    async def _get_event_city(
         self, callback: aiogram.types.CallbackQuery, state: FSMContext
     ):
+        await callback.message.edit_reply_markup()
+        await state.update_data(city=callback.data.split("_")[-1])
         await callback.message.answer(
             "Отправьте фото для забега:", reply_markup=self._cancel_keyboard
         )
@@ -124,6 +141,7 @@ class TG_Bot:
         date = datetime.strptime(event_data["date"], "%d.%m в %H:%M")
         date = date.replace(year=datetime.now().year)
         event = Event(
+            city=event_data["city"],
             description=event_data["description"],
             date=date,
             location=event_data["location"],
@@ -334,7 +352,9 @@ class TG_Bot:
     async def _show_events(self, callback: aiogram.types.CallbackQuery):
         user = await self._users_storage.get_by_id(callback.from_user.id)
         if user.role == User.USER:
-            events = await self._events_storage.get_all_events(actual_only=True)
+            events = await self._events_storage.get_all_events(
+                city=user.location, actual_only=True
+            )
             if len(events) == 0:
                 await callback.message.answer("На данный момент нет активных забегов")
             else:
@@ -604,6 +624,10 @@ class TG_Bot:
         self._dispatcher.callback_query.register(
             self._create_event,
             aiogram.F.data == "create_event",
+        )
+        self._dispatcher.callback_query.register(
+            self._get_event_city,
+            aiogram.F.data.startswith("set_event_city_"),
         )
         self._dispatcher.callback_query.register(
             self._confirm_deleting_event,

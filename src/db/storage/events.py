@@ -97,14 +97,22 @@ class EventsStorage:
             event.id,
         )
 
-    async def get_all_events(self, actual_only: bool = False) -> List[Event]:
+    async def get_all_events(
+        self, city: str = None, actual_only: bool = False
+    ) -> List[Event]:
         query = f"""
             SELECT id, city, description, date, location, tempo, photo_id 
             FROM {self.__table}
-            {f"WHERE date > $1" if actual_only else ""}
+            WHERE 1=1
+            {f"AND date > $1" if actual_only else ""}
+            {f"AND city = ANY(SELECT unnest(string_to_array($2, '')))" if city else ""}
             ORDER BY date ASC
         """
-        params = [datetime.now()] if actual_only else []
+        params = []
+        if actual_only:
+            params.append(datetime.now())
+        if city:
+            params.append(city)
         data = await self._db.fetch(query, *params)
         if not data:
             return []
