@@ -16,8 +16,8 @@ class User:
     name: Optional[str] = None
     phone: Optional[str] = None
     emergency_contact: Optional[str] = None
-    location: str = "1"
     role: str = USER
+    location: str = "1"
 
     def __str__(self):
         return f"<a href='tg://user?id={self.id}'>{self.name}</a>\nPhone: {self.phone}\nEmergency Contact: {self.emergency_contact}"
@@ -37,8 +37,8 @@ class UsersStorage:
                 name TEXT,
                 phone TEXT,
                 emergency_contact TEXT,
-                location TEXT,
-                role TEXT
+                role TEXT,
+                location TEXT
             )
         """
         )

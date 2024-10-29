@@ -7,6 +7,7 @@ from db.storage.registrations import RegistrationsStorage
 
 @dataclass
 class Event:
+    city: str
     description: str
     date: datetime
     location: str
@@ -44,34 +45,37 @@ class EventsStorage:
                 date TEXT,
                 location TEXT,
                 tempo TEXT,
-                photo_id TEXT
+                photo_id TEXT,
+                city TEXT
             )
             """
         )
 
     async def get_by_id(self, event_id: int) -> Event:
         data = await self._db.fetchrow(
-            f"SELECT id, description, date, location, tempo, photo_id FROM {self.__table} WHERE id = $1",
+            f"SELECT id, city, description, date, location, tempo, photo_id FROM {self.__table} WHERE id = $1",
             event_id,
         )
         if data is None:
             return None
         return Event(
-            description=data[1],
-            date=data[2],
-            location=data[3],
-            tempo=data[4],
-            photo_id=data[5],
             id=data[0],
+            city=data[1],
+            description=data[2],
+            date=data[3],
+            location=data[4],
+            tempo=data[5],
+            photo_id=data[6],
         )
 
     async def create(self, event: Event) -> int:
         return await self._db.fetchval(
             f"""
-            INSERT INTO {self.__table} (description, date, location, tempo, photo_id) 
-            VALUES ($1, $2, $3, $4, $5)
+            INSERT INTO {self.__table} (city, description, date, location, tempo, photo_id) 
+            VALUES ($1, $2, $3, $4, $5, $6)
             RETURNING id
         """,
+            event.city,
             event.description,
             event.date,
             event.location,
@@ -82,8 +86,9 @@ class EventsStorage:
     async def update(self, event: Event):
         await self._db.execute(
             f"""
-            UPDATE {self.__table} SET description = $1, date = $2, location = $3, tempo = $4, photo_id = $5 WHERE id = $6
+            UPDATE {self.__table} SET city = $1, description = $2, date = $3, location = $4, tempo = $5, photo_id = $6 WHERE id = $7
         """,
+            event.city,
             event.description,
             event.date,
             event.location,
@@ -94,7 +99,7 @@ class EventsStorage:
 
     async def get_all_events(self, actual_only: bool = False) -> List[Event]:
         query = f"""
-            SELECT id, description, date, location, tempo, photo_id 
+            SELECT id, city, description, date, location, tempo, photo_id 
             FROM {self.__table}
             {f"WHERE date > $1" if actual_only else ""}
             ORDER BY date ASC
@@ -105,11 +110,12 @@ class EventsStorage:
             return []
         return [
             Event(
-                description=row[1],
-                date=row[2],
-                location=row[3],
-                tempo=row[4],
-                photo_id=row[5],
+                city=row[1],
+                description=row[2],
+                date=row[3],
+                location=row[4],
+                tempo=row[5],
+                photo_id=row[6],
                 id=row[0],
             )
             for row in data

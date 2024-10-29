@@ -284,6 +284,7 @@ class TG_Bot:
                 )
 
     def _build_location_keyboard(self, user_location: str):
+        print(user_location)
         moscow_text = "Москва"
         dolgoprudny_text = "Долгопрудный"
         all_text = "Все локации"
@@ -322,7 +323,7 @@ class TG_Bot:
         )
 
     async def _change_location_choice(self, callback: aiogram.types.CallbackQuery):
-        location = callback.data.split("_")[1]
+        location = callback.data.split("_")[-1]
         user = await self._users_storage.get_by_id(callback.from_user.id)
         user.location = location
         await self._users_storage.update(user)
