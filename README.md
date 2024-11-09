@@ -6,7 +6,6 @@ A brief description of what Physhkabot does and its main purpose.
 
 -   Feature 1
 -   Feature 2
--   Feature 3
 
 ## Installation
 

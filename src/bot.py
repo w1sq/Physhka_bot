@@ -434,7 +434,10 @@ class TG_Bot:
                 message += f"<s>{user}</s>\n\n"
             else:
                 message += str(user) + f"\nОпоздание {registration.late} мин\n\n"
-        await callback.message.answer(message)
+        if message == "":
+            await callback.answer("Никто не записан")
+        else:
+            await callback.message.answer(message)
 
     async def _ask_change_late(
         self, callback: aiogram.types.CallbackQuery, state: FSMContext
