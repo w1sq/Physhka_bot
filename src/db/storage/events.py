@@ -105,7 +105,7 @@ class EventsStorage:
             FROM {self.__table}
             WHERE 1=1
             {f"AND date > $1" if actual_only else ""}
-            {f"AND city = ANY(SELECT unnest(string_to_array($2, '')))" if city else ""}
+            {f"AND $2 LIKE '%' || city || '%'" if city else ""}
             ORDER BY date ASC
         """
         params = []

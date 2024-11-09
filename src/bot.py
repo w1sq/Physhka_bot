@@ -1,5 +1,6 @@
 import typing
 from datetime import datetime
+
 import aiogram
 from aiogram.filters.command import Command
 from aiogram.fsm.state import State, StatesGroup
@@ -302,7 +303,6 @@ class TG_Bot:
                 )
 
     def _build_location_keyboard(self, user_location: str):
-        print(user_location)
         moscow_text = "Москва"
         dolgoprudny_text = "Долгопрудный"
         all_text = "Все локации"
